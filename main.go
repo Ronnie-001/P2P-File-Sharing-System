@@ -14,11 +14,14 @@ import (
 func main() {
 	// Grab the identity of the user from command line arguments.
 	name :=	ui.SetIdentity()
+	
 	server, err := discovery.StartServer()
 	if err != nil {
 		log.Fatalf("Error when starting mDNS server: %v", err)
 	}
-	
+
+	fmt.Printf("-> mDNS server started!")
+
 	defer discovery.StopServer(server)
 
 	reader := bufio.NewReader(os.Stdin)
