@@ -11,3 +11,4 @@ func SetIdentity() string {
 	return *name
 }
 
+func GrabUsers() ([]string, error) {return []string{}, nil}

@@ -14,7 +14,7 @@ func StartServer() (*zeroconf.Server, error) {
 		"_fileshare._tcp",
 		".local",
 		8000,
-		[]string{"A simple file sharing service."},
+		[]string{"desc=A simple file sharing service."},
 		nil,
 	) 
 	if err != nil {
@@ -22,6 +22,10 @@ func StartServer() (*zeroconf.Server, error) {
 	}
 
 	return server, nil
+}
+
+func DiscoverServers() {
+
 }
 
 func StopServer(server *zeroconf.Server) {
