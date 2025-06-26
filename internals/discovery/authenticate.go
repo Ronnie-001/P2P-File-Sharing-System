@@ -10,7 +10,7 @@ import (
 	"fmt"
 )
 
-func generatePrivateKey() (*rsa.PrivateKey, *rsa.PublicKey) {
+func generateKeyPairs() (*rsa.PrivateKey, *rsa.PublicKey) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 1024)
 	if err != nil {
 		fmt.Errorf("error when generating private key")  
@@ -21,9 +21,9 @@ func generatePrivateKey() (*rsa.PrivateKey, *rsa.PublicKey) {
 	return privateKey, publicKey
 }
 
-func encodeRsaKeys() (privateKeyPEM, publicKeyPEM *pem.Block) {
+func EncodeRsaKeys() (privateKeyPEM, publicKeyPEM *pem.Block) {
 	
-	private, public := generatePrivateKey()	
+	private, public := generateKeyPairs()	
 
 	privateKeyPEM = &pem.Block{
 		Type: "RSA PRIVATE KEY",

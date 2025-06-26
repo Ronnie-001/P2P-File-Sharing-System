@@ -15,7 +15,7 @@ func main() {
 	// Grab the identity of the user from command line arguments.
 	name :=	ui.SetIdentity()
 	
-	server, err := discovery.StartServer()
+	server, err := discovery.StartServer(name)
 	if err != nil {
 		log.Fatalf("Error when starting mDNS server: %v", err)
 	}
