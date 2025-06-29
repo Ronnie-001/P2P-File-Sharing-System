@@ -13,14 +13,16 @@ import (
 
 func main() {
 	// Grab the identity of the user from command line arguments.
-	name :=	ui.SetIdentity()
+	name :=	ui.GetIdentity()
 	
 	server, err := discovery.StartServer(name)
 	if err != nil {
 		log.Fatalf("Error when starting mDNS server: %v", err)
 	}
 
-	fmt.Printf("-> mDNS server started!")
+	fmt.Printf("-> mDNS server started!\n")
+
+	discovery.DiscoverServers()
 
 	defer discovery.StopServer(server)
 

@@ -6,14 +6,13 @@ import (
 	"crypto/x509"
 
 	"encoding/pem"
-
-	"fmt"
+	"log"
 )
 
-func generateKeyPairs() (*rsa.PrivateKey, *rsa.PublicKey) {
+func GenerateKeyPairs() (*rsa.PrivateKey, *rsa.PublicKey) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 1024)
 	if err != nil {
-		fmt.Errorf("error when generating private key")  
+		log.Fatal(err)
 	}
 
 	publicKey := &privateKey.PublicKey
@@ -21,16 +20,16 @@ func generateKeyPairs() (*rsa.PrivateKey, *rsa.PublicKey) {
 	return privateKey, publicKey
 }
 
-func EncodeRsaKeys() (privateKeyPEM, publicKeyPEM *pem.Block) {
+func GetEncodedRsaKeys() (privateKeyBlock *pem.Block, publicKeyBlock *pem.Block) {
 	
-	private, public := generateKeyPairs()	
+	private, public := GenerateKeyPairs()	
 
-	privateKeyPEM = &pem.Block{
+	privateKeyBlock = &pem.Block{
 		Type: "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(private),
 	}
-
-	publicKeyPEM = &pem.Block{
+	
+	publicKeyBlock = &pem.Block{
 		Type: "RSA PUBLIC KEY",
 		Bytes: x509.MarshalPKCS1PublicKey(public),
 	}

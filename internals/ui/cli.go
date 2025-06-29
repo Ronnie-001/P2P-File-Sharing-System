@@ -4,7 +4,7 @@ import (
 	"flag"
 )
 
-func SetIdentity() string {
+func GetIdentity() string {
 	name := flag.String("n", "(?)anon", "Identity of connected user.")
 	flag.Parse()
 
