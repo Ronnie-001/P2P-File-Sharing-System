@@ -1,9 +1,9 @@
 package discovery
 
 import (
-	"context"
-	"encoding/pem"
 	"p2p-file-share/internals/ui"
+
+	"encoding/pem"
 
 	"crypto"
 	"crypto/rsa"
@@ -12,6 +12,7 @@ import (
 
 	"fmt"
 	"time"
+	"context"
 
 	"github.com/grandcat/zeroconf"
 )
@@ -45,7 +46,16 @@ func StartServer(identity string) (*zeroconf.Server, error) {
 		"_fileshare._tcp",
 		".local",
 		8000,
-		[]string{"A simple file sharing service.", string(signature), string(publicKeyBlock)},
+		// TODO: Inlucde a signed payload within the TXT field, should contain
+		// the users actual name, the pulbicKeyBlock & a timestamp.
+
+		// TODO: encode the signature
+		[]string{
+			"desc=A simple file sharing service.",  
+			string(signature), 
+			string(publicKeyBlock),
+			// add payload here
+			},
 		nil,
 	) 
 	if err != nil {
@@ -66,17 +76,19 @@ func DiscoverServers() (error) {
 	}
 
 	entries := make(chan *zeroconf.ServiceEntry)
-	go func (results <-chan *zeroconf.ServiceEntry) (error) {
+	go func (results <-chan *zeroconf.ServiceEntry) () {
 		for entry := range entries {
+			// TODO: Decode and parse payload for the publicKeyBlock
+
 			// grab the public key & signature from the txt field
 			publicKeyBlock := []byte(entry.Text[2])
 			signature := []byte(entry.Text[1])
 			
 			publicKeyData, _ := pem.Decode(publicKeyBlock)
 			if publicKeyData == nil {
-				return fmt.Errorf("unable to decode the public key block mDNS broadcast")
+				fmt.Errorf("unable to decode the public key block mDNS broadcast")
 			} else if publicKeyData.Type != "RSA PUBLIC KEY"{
-				return fmt.Errorf("invalid headers for public key")
+				fmt.Errorf("invalid headers for public key")
 			}
 			
 			publicKey, err := x509.ParsePKCS1PublicKey(publicKeyData.Bytes)
@@ -92,14 +104,13 @@ func DiscoverServers() (error) {
 			if err != nil {
 				fmt.Printf("Unable to verify public key from mDNS service " + entry.ServiceName() + ": %v", err)
 			}
-				
+
 			// TODO: Add to some sort of user list that can accessed through a command.
 		}
 
-		return nil
 	}(entries)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 	
 	err = resolver.Browse(ctx, "_fileshare._tcp", "local", entries)
