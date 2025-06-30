@@ -22,17 +22,16 @@ func StartServer(identity string) (*zeroconf.Server, error) {
 	
 	privateKeyBlock, publicKeyBlock := GetEncodedRsaKeys()
 	
-	//TODO: Try passing in all the data from the PEM block, rather than just the bytes. 
-	privateKeyData, _ := pem.Decode(privateKeyBlock.Bytes)
+	privateKeyData, _ := pem.Decode(privateKeyBlock)
 	if privateKeyData == nil {
 		return nil, fmt.Errorf("no PEM data found for privateKeyBlock")
 	} else if privateKeyData.Type != "RSA PRIVATE KEY" {
 		return nil, fmt.Errorf("invalid headers for private key (PEM formatted block)")	
 	}
 	
-	privateKey, err := x509.ParsePKCS1PrivateKey(privateKeyBlock.Bytes)
+	privateKey, err := x509.ParsePKCS1PrivateKey(privateKeyData.Bytes)
 	if err != nil {
-		return nil, fmt.Errorf("unable to parse private key from PEM format")
+		return nil, fmt.Errorf("unable to parse private key from PEM format: %v", err)
 	}
 
 	hash := sha256.Sum256([]byte(identity))
@@ -46,7 +45,7 @@ func StartServer(identity string) (*zeroconf.Server, error) {
 		"_fileshare._tcp",
 		".local",
 		8000,
-		[]string{"A simple file sharing service.", string(signature), string(publicKeyBlock.Bytes)},
+		[]string{"A simple file sharing service.", string(signature), string(publicKeyBlock)},
 		nil,
 	) 
 	if err != nil {
@@ -67,14 +66,20 @@ func DiscoverServers() (error) {
 	}
 
 	entries := make(chan *zeroconf.ServiceEntry)
-	go func (results <-chan *zeroconf.ServiceEntry) {
+	go func (results <-chan *zeroconf.ServiceEntry) (error) {
 		for entry := range entries {
 			// grab the public key & signature from the txt field
-			publicKeyBytes := []byte(entry.Text[2])
+			publicKeyBlock := []byte(entry.Text[2])
 			signature := []byte(entry.Text[1])
-
 			
-			publicKey, err := x509.ParsePKCS1PublicKey(publicKeyBytes)
+			publicKeyData, _ := pem.Decode(publicKeyBlock)
+			if publicKeyData == nil {
+				return fmt.Errorf("unable to decode the public key block mDNS broadcast")
+			} else if publicKeyData.Type != "RSA PUBLIC KEY"{
+				return fmt.Errorf("invalid headers for public key")
+			}
+			
+			publicKey, err := x509.ParsePKCS1PublicKey(publicKeyData.Bytes)
 			if err != nil {
 				fmt.Printf("error parsing public key: %v", err)
 			}
@@ -87,9 +92,11 @@ func DiscoverServers() (error) {
 			if err != nil {
 				fmt.Printf("Unable to verify public key from mDNS service " + entry.ServiceName() + ": %v", err)
 			}
-			
+				
 			// TODO: Add to some sort of user list that can accessed through a command.
 		}
+
+		return nil
 	}(entries)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
