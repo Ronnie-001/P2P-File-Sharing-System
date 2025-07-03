@@ -3,6 +3,7 @@ package discovery
 import (
 	"p2p-file-share/internals/ui"
 
+	"encoding/base64"
 	"encoding/pem"
 
 	"crypto"
@@ -10,9 +11,9 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 
+	"context"
 	"fmt"
 	"time"
-	"context"
 
 	"github.com/grandcat/zeroconf"
 )
@@ -24,6 +25,7 @@ func StartServer(identity string) (*zeroconf.Server, error) {
 	privateKeyBlock, publicKeyBlock := GetEncodedRsaKeys()
 	
 	privateKeyData, _ := pem.Decode(privateKeyBlock)
+
 	if privateKeyData == nil {
 		return nil, fmt.Errorf("no PEM data found for privateKeyBlock")
 	} else if privateKeyData.Type != "RSA PRIVATE KEY" {
@@ -41,23 +43,25 @@ func StartServer(identity string) (*zeroconf.Server, error) {
 		return nil, fmt.Errorf("unable to encrypt signature: %v", err)
 	}
 	
+	publicKeyBlockStr := base64.StdEncoding.EncodeToString(publicKeyBlock)
+
 	server, err := zeroconf.Register(
 		"P2P fileshare",
 		"_fileshare._tcp",
 		".local",
 		8000,
 		// TODO: Inlucde a signed payload within the TXT field, should contain
-		// the users actual name, the pulbicKeyBlock & a timestamp.
+		// the users actual name, the pulbicKeyBlock & a timestamp. Also, encode this to 
+		// base64
 
-		// TODO: encode the signature
 		[]string{
-			"desc=A simple file sharing service.",  
+			"A simple file sharing service.",  
 			string(signature), 
-			string(publicKeyBlock),
-			// add payload here
+			publicKeyBlockStr,
 			},
 		nil,
 	) 
+	
 	if err != nil {
 		return nil, fmt.Errorf("couldn't register the mDNS server: %v", err) 
 	}
@@ -78,19 +82,26 @@ func DiscoverServers() (error) {
 	entries := make(chan *zeroconf.ServiceEntry)
 	go func (results <-chan *zeroconf.ServiceEntry) () {
 		for entry := range entries {
-			// TODO: Decode and parse payload for the publicKeyBlock
+			// TODO: Decode and parse payload for the publicKeyBytes
 
 			// grab the public key & signature from the txt field
-			publicKeyBlock := []byte(entry.Text[2])
 			signature := []byte(entry.Text[1])
+			publicKeyBlockStr := entry.Text[2]
+			
+			publicKeyBlock, err := base64.StdEncoding.DecodeString(publicKeyBlockStr)
+			if err != nil {
+				fmt.Println("error when decoding PEM block string")
+			}
+			
+			fmt.Println(string(publicKeyBlock))
 			
 			publicKeyData, _ := pem.Decode(publicKeyBlock)
 			if publicKeyData == nil {
-				fmt.Errorf("unable to decode the public key block mDNS broadcast")
+				fmt.Printf("unable to decode the public key block from mDNS broadcast. ")
 			} else if publicKeyData.Type != "RSA PUBLIC KEY"{
-				fmt.Errorf("invalid headers for public key")
+				fmt.Printf("invalid headers for public key")
 			}
-			
+
 			publicKey, err := x509.ParsePKCS1PublicKey(publicKeyData.Bytes)
 			if err != nil {
 				fmt.Printf("error parsing public key: %v", err)

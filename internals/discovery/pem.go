@@ -4,10 +4,9 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
-	
+
 	"encoding/pem"
 	"log"
-
 )
 
 func GenerateKeyPairs() (*rsa.PrivateKey, *rsa.PublicKey) {
