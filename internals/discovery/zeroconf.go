@@ -1,8 +1,6 @@
 package discovery
 
 import (
-	"p2p-file-share/internals/ui"
-
 	"encoding/base64"
 	"encoding/pem"
 
@@ -22,17 +20,16 @@ func StartServer(identity string) (*zeroconf.Server, error) {
 
 	fmt.Println("-> Starting the mDNS server.")
 	
-	privateKeyBlock, publicKeyBlock := GetEncodedRsaKeys()
+	privatePEMBytes, publicPEMBytes := GetEncodedRsaKeys()
 	
-	privateKeyData, _ := pem.Decode(privateKeyBlock)
-
-	if privateKeyData == nil {
-		return nil, fmt.Errorf("no PEM data found for privateKeyBlock")
-	} else if privateKeyData.Type != "RSA PRIVATE KEY" {
+	privateBlock, _ := pem.Decode(privatePEMBytes)
+	if privateBlock == nil {
+		return nil, fmt.Errorf("no PEM data found for privatePEMBytes")
+	} else if privateBlock.Type != "RSA PRIVATE KEY" {
 		return nil, fmt.Errorf("invalid headers for private key (PEM formatted block)")	
 	}
 	
-	privateKey, err := x509.ParsePKCS1PrivateKey(privateKeyData.Bytes)
+	privateKey, err := x509.ParsePKCS1PrivateKey(privateBlock.Bytes)
 	if err != nil {
 		return nil, fmt.Errorf("unable to parse private key from PEM format: %v", err)
 	}
@@ -42,22 +39,26 @@ func StartServer(identity string) (*zeroconf.Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("unable to encrypt signature: %v", err)
 	}
+
+	encodedSignature := base64.StdEncoding.EncodeToString(signature)
 	
-	publicKeyBlockStr := base64.StdEncoding.EncodeToString(publicKeyBlock)
+	publicKeyBlockStr := base64.StdEncoding.EncodeToString(publicPEMBytes)
+	
+	// split the publicKeyBlock (PEM block) into chunks due to TXT field byte limit. 
+	chunk1 := publicKeyBlockStr[:200]
+	chunk2 := publicKeyBlockStr[200:]
 
 	server, err := zeroconf.Register(
 		"P2P fileshare",
 		"_fileshare._tcp",
 		".local",
 		8000,
-		// TODO: Inlucde a signed payload within the TXT field, should contain
-		// the users actual name, the pulbicKeyBlock & a timestamp. Also, encode this to 
-		// base64
-
 		[]string{
 			"A simple file sharing service.",  
-			string(signature), 
-			publicKeyBlockStr,
+			encodedSignature,
+			chunk1,		// publicKeyBlockStr broken down here due to 255 byte limit of txt fields 
+			chunk2,
+			identity,
 			},
 		nil,
 	) 
@@ -82,38 +83,42 @@ func DiscoverServers() (error) {
 	entries := make(chan *zeroconf.ServiceEntry)
 	go func (results <-chan *zeroconf.ServiceEntry) () {
 		for entry := range entries {
-			// TODO: Decode and parse payload for the publicKeyBytes
 
 			// grab the public key & signature from the txt field
-			signature := []byte(entry.Text[1])
-			publicKeyBlockStr := entry.Text[2]
-			
-			publicKeyBlock, err := base64.StdEncoding.DecodeString(publicKeyBlockStr)
+			signature := entry.Text[1]
+
+			chunk1 := entry.Text[2]
+			chunk2 := entry.Text[3]		
+			publicKeyBlockStr := chunk1 + chunk2 
+
+			publicPEMBlock, err := base64.StdEncoding.DecodeString(publicKeyBlockStr)
 			if err != nil {
 				fmt.Println("error when decoding PEM block string")
 			}
 			
-			fmt.Println(string(publicKeyBlock))
+			fmt.Println(string(publicPEMBlock))
 			
-			publicKeyData, _ := pem.Decode(publicKeyBlock)
-			if publicKeyData == nil {
+			publicBlock, _ := pem.Decode(publicPEMBlock)
+			if publicBlock == nil || publicBlock.Type != "RSA PUBLIC KEY" {
 				fmt.Printf("unable to decode the public key block from mDNS broadcast. ")
-			} else if publicKeyData.Type != "RSA PUBLIC KEY"{
-				fmt.Printf("invalid headers for public key")
 			}
 
-			publicKey, err := x509.ParsePKCS1PublicKey(publicKeyData.Bytes)
+			publicKey, err := x509.ParsePKCS1PublicKey(publicBlock.Bytes)
 			if err != nil {
-				fmt.Printf("error parsing public key: %v", err)
+				fmt.Printf("error parsing public block: %v", err)
 			}
+			
+			identity := entry.Text[4]	
+			hash := sha256.Sum256([]byte(identity))
 
-			// Get the identity of the user
-			Identity := ui.GetIdentity()
-			hash := sha256.Sum256([]byte(Identity))
-
-			err = rsa.VerifyPKCS1v15(publicKey, crypto.SHA256, hash[:], signature) 
+			decodedSignature, err := base64.StdEncoding.DecodeString(signature)
 			if err != nil {
-				fmt.Printf("Unable to verify public key from mDNS service " + entry.ServiceName() + ": %v", err)
+				fmt.Println("error decoding signature")
+			}
+			
+			err = rsa.VerifyPKCS1v15(publicKey, crypto.SHA256, hash[:], decodedSignature) 
+			if err != nil {
+				fmt.Printf("Unable to verify signature from mDNS service with public key." + entry.ServiceName() + ": %v ", err)
 			}
 
 			// TODO: Add to some sort of user list that can accessed through a command.
