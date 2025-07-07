@@ -74,10 +74,13 @@ func StopServer(server *zeroconf.Server) {
 	server.Shutdown()	
 }
 
-func DiscoverServers() (error) {
+func DiscoverServers() ([]string, error) {
+	
+	var userList []string
+
 	resolver, err := zeroconf.NewResolver(nil)	
 	if err != nil {
-		return fmt.Errorf("error when starting up discovery: %v", err)
+		return userList, fmt.Errorf("error when starting up discovery: %v", err)
 	}
 
 	entries := make(chan *zeroconf.ServiceEntry)
@@ -95,8 +98,6 @@ func DiscoverServers() (error) {
 			if err != nil {
 				fmt.Println("error when decoding PEM block string")
 			}
-			
-			fmt.Println(string(publicPEMBlock))
 			
 			publicBlock, _ := pem.Decode(publicPEMBlock)
 			if publicBlock == nil || publicBlock.Type != "RSA PUBLIC KEY" {
@@ -120,8 +121,9 @@ func DiscoverServers() (error) {
 			if err != nil {
 				fmt.Printf("Unable to verify signature from mDNS service with public key." + entry.ServiceName() + ": %v ", err)
 			}
-
-			// TODO: Add to some sort of user list that can accessed through a command.
+			
+			userList = append(userList, identity)
+			
 		}
 
 	}(entries)
@@ -131,9 +133,9 @@ func DiscoverServers() (error) {
 	
 	err = resolver.Browse(ctx, "_fileshare._tcp", "local", entries)
 	if err != nil {
-		return fmt.Errorf("error when browsing for mDNS servers: %v", err)
+		return userList, fmt.Errorf("error when browsing for mDNS servers: %v", err)
 	}
 	
 	<-ctx.Done()
-	return nil
+	return  userList, nil
 }

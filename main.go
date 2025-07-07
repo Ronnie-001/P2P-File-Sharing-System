@@ -21,9 +21,12 @@ func main() {
 	}
 
 	fmt.Printf("-> mDNS server started!\n")
-
-	discovery.DiscoverServers()
-
+	
+	users, err := discovery.DiscoverServers()
+	if err != nil {
+		log.Fatalf("error when finding client using service: %v", err)
+	}
+	
 	defer discovery.StopServer(server)
 
 	reader := bufio.NewReader(os.Stdin)
@@ -37,6 +40,10 @@ func main() {
 		
 		if strings.Compare(input, "exit") == 0 {
 			break
+		}
+		
+		if strings.Compare(input, "show user list") == 0 {
+			ui.DisplayUsers(users)
 		}
 	}
 }
