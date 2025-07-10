@@ -137,5 +137,5 @@ func DiscoverServers() ([]string, error) {
 	}
 	
 	<-ctx.Done()
-	return  userList, nil
+	return userList, nil
 }
