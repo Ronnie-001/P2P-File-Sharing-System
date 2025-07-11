@@ -5,17 +5,24 @@ import (
 	"net"
 )
 
-func ListenAndAccept() {
-	ln, err := net.Listen("tcp", ":21") // port 21 for file transfers using TCP
+func StartTCPServer() (conn net.Conn) {
+	ln, err := net.Listen("tcp", ":8080")
 	if err != nil {
 		log.Fatal(err)
 	}
 	
 	for {
-		conn, err := ln.Accept()	
+		conn, err := ln.Accept()
 		if err != nil {
 			log.Fatal(err)
 		}
-
+		
+		go RecieveFile(conn)
 	}
+}
+
+func SendFile(path string) {}
+
+func RecieveFile(conn net.Conn) {
+	defer conn.Close()
 }

@@ -16,7 +16,7 @@ import (
 	"github.com/grandcat/zeroconf"
 )
 
-func StartServer(identity string) (*zeroconf.Server, error) {
+func RegisterMDNS(identity string) (*zeroconf.Server, error) {
 
 	fmt.Println("-> Starting the mDNS server.")
 	
@@ -70,11 +70,11 @@ func StartServer(identity string) (*zeroconf.Server, error) {
 	return server, nil
 }
 
-func StopServer(server *zeroconf.Server) {
+func StopMDNS(server *zeroconf.Server) {
 	server.Shutdown()	
 }
 
-func DiscoverServers() ([]string, error) {
+func DiscoverMDNS() ([]string, error) {
 	
 	var userList []string
 
