@@ -34,12 +34,11 @@ func main() {
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Printf("User: %v, connected \n", name)
 	
-
 	go transfer.StartTCPServer()	
 
 	var wg sync.WaitGroup 
 	wg.Add(1)
-	
+
 	/*
 		Users should be able to provide user input whilst TCP server listens for connections,
 		Run TCP server concurrently with main for loop
@@ -50,13 +49,19 @@ func main() {
 			text, _ := reader.ReadString('\n')
 			
 			input := strings.TrimSpace(text) 
-			
+
+			// avaliable commands
 			if strings.Compare(input, "exit") == 0 {
 				wg.Done()
 			}
 			
 			if strings.Compare(input, "show user list") == 0 {
 				ui.DisplayUsers(users)
+			}
+			
+			if strings.Contains(input, "send file -u") {
+				splitInput := strings.Split(input, " ")
+				transfer.SendFile(splitInput[3], splitInput[4])
 			}
 		}
 	}()

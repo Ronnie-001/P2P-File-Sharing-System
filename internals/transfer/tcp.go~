@@ -1,0 +1,61 @@
+// Package transfer: used for sending and reciving files between clients.
+package transfer
+
+import (
+	"fmt"
+	"log"
+	"net"
+	"os"
+	
+	"p2p-file-share/internals/utils"
+)
+
+var (
+	network = "tcp"
+	port = ":4500"
+
+	// map for users and their local IP's
+	m = make(map[string]string)
+)
+
+func AddIP(name, ip string) {
+	m[name] = ip		
+}
+
+func StartTCPServer() (conn net.Conn) {
+	ln, err := net.Listen(network, port)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			log.Fatal(err)
+		}
+		
+		go RecieveFile(conn)
+	}
+}
+
+func SendFile(name, path string) {
+	localIp, ok := m[name]
+	if !ok {
+		fmt.Println("IP of user " + name + " not found!")
+	}
+	
+	fmt.Println(localIP)	
+	fmt.Println(port)	
+
+	address := localIp + port
+	conn, err := net.Dial(network, address)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func RecieveFile(conn net.Conn) {
+	fmt.Print("Incoming file transfer request")
+
+	defer conn.Close()
+}
