@@ -6,8 +6,8 @@ import (
 	"io"
 	"log"
 	"net"
-
 	"os"
+	"sync"
 )
 
 var (
@@ -23,19 +23,50 @@ func AddIP(name, ip string) {
 	m[name] = ip		
 }
 
-func StartTCPServer() (conn net.Conn) {
+func StartTCPServer() (error) {
 	ln, err := net.Listen(network, port)
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	for {
+	
+	data := make(chan string)
+	var wg sync.WaitGroup
+	
+	// only accept 2 connections 1=[name & filetype] & 2=[actual data from the file]  
+	for i := 0; i < 2; i++ {
 		conn, err := ln.Accept()
 		if err != nil {
-			log.Fatal(err)
+			return fmt.Errorf("unable to accept incoming connections: %v", err)		
 		}
-		
-		go RecieveFile(conn)
+		wg.Add(1)
+		go handleConnection(i, conn, &wg, data)
+	}
+
+	wg.Wait()
+	close(data)
+	RecieveFile(data)	
+
+	return nil
+}
+
+func handleConnection(id int, conn net.Conn, wg *sync.WaitGroup, data chan string) (error) {
+	defer conn.Close()
+	defer wg.Done()
+	
+	bytes := make([]byte, byteLimit)	
+	for {
+		_, err := conn.Read(bytes)	
+		if err != nil {
+			if id == 0 {
+				return fmt.Errorf("error when trying to read in the name and filetype: %v", err)
+			}
+			if id == 1 {
+				return fmt.Errorf("error when trying to read in raw data from file")	
+			}
+		}
+
+		data <- string(bytes)
+		fmt.Printf("Data read from %v successfully!", id)
 	}
 }
 
@@ -45,13 +76,13 @@ func SendFile(name, path string) {
 		fmt.Println("IP of user " + name + " not found!")
 	}
 	
+	// form the address from the local ip and port number
 	address := localIP + port
-	fmt.Println(address)
 	conn, err := net.Dial(network, address)
 	if err != nil {
 		log.Fatal(err)
 	}
-
+	
 	file, err := os.Open(path) 
 	if err != nil {
 		log.Fatal(err)
@@ -64,30 +95,6 @@ func SendFile(name, path string) {
 	}
 }
 
-func RecieveFile(conn net.Conn) {
-	defer conn.Close()
-
-	// create buffer to store our data.
-	buffer := make([]byte, byteLimit)
-
-	file, err := os.Create("test")
-		if err != nil {
-			log.Fatal(err)
-		}
-
-	// Read in the data from the sender.
-	for {
-		_, err := conn.Read(buffer)
-		
-		// check if we have reached the end of the file
-		if err == io.EOF {
-			break
-		}
-
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-	
-	file.Write(buffer)
+func RecieveFile(data chan string) {
+	//TODO: iterate over the go channel to recive file info and data.
 }

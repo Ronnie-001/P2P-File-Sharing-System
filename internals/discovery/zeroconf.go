@@ -119,7 +119,7 @@ func DiscoverMDNS() ([]string, error) {
 			if err != nil {
 				fmt.Printf("error parsing public block: %v", err)
 			}
-
+	
 			identity := entry.Text[4]
 			hash := sha256.Sum256([]byte(identity))
 
