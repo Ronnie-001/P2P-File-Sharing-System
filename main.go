@@ -34,8 +34,11 @@ func main() {
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Printf("User: %v, connected \n", name)
 	
-	go transfer.StartTCPServer()	
-
+	go func() {
+		if err := transfer.StartTCPServer(); err != nil {
+			log.Fatalf("Failed to start TCP server: %v", err)
+		}	
+	}()
 	var wg sync.WaitGroup 
 	wg.Add(1)
 

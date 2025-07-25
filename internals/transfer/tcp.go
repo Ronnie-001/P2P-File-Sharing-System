@@ -3,7 +3,6 @@ package transfer
 
 import (
 	"bufio"
-	"encoding/base64"
 	"fmt"
 	"io"
 	"log"
@@ -11,13 +10,11 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 )
 
 var (
 	network = "tcp"
 	port = ":4500"
-	byteLimit = 15000000 
 
 	// map for users and their local IP's
 	m = make(map[string]string)
@@ -36,7 +33,7 @@ func StartTCPServer() (error) {
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
-			return fmt.Errorf("unable to accept incoming connections: %v", err)		
+			return fmt.Errorf("Unable to accept incoming connection: %v", err)		
 		}
 		go handleConnection(conn)		
 	}
@@ -49,12 +46,14 @@ func handleConnection(conn net.Conn) {
 	reader := bufio.NewReader(conn)
 	metadataStr, err := reader.ReadString('\n')
 	if err != nil {
+		log.Printf("Unable to grab metadata from incoming connection")
 		return 
 	}
 
 	metadataStr = strings.TrimSpace(metadataStr)
 	parts := strings.Split(metadataStr, "|")
 	if len(parts) != 2 {
+		log.Printf("Metadata does not have all avaliable parts")
 		return
 	}
 
@@ -62,12 +61,14 @@ func handleConnection(conn net.Conn) {
 	fileSizeStr := parts[1]
 	fileSize, err :=  strconv.ParseInt(fileSizeStr, 10, 64)
 	if err != nil {
+		log.Printf("Unable to parse metadata for file size")
 		return
 	}
 
 	// create the file
 	file, err := os.Create(filename)
 	if err != nil {
+		log.Printf("Unable to create file")
 		return
 	}
 
@@ -75,18 +76,16 @@ func handleConnection(conn net.Conn) {
 	
 	n, err := io.Copy(file, io.LimitReader(reader, fileSize))
 	if err != nil {
+		log.Printf("Unable to copy file contents to TCP server")
 		return 
 	}
 
 	if n != fileSize {
 		log.Printf("Recieved more bytes than usual")
 	}
-
 }
 
 func SendFile(name, path string) {
-	var wg sync.WaitGroup
-
 	localIP, ok := m[name]
 	if !ok {
 		fmt.Println("IP of user " + name + " not found!")
@@ -94,42 +93,35 @@ func SendFile(name, path string) {
 	
 	// form the address from the local ip and port number
 	address := localIP + port
-
-	// go routine to send the name of the file and the file type.
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		conn, err := net.Dial(network, address)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		defer conn.Close()	
-
-		splitPath := strings.Split(path, "/")
-		nameOfFile := splitPath[len(splitPath) - 1]
-		
-		conn.Write([]byte(nameOfFile))
-	}()	
 	
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		conn, err := net.Dial(network, address)
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer conn.Close()
-		file, err := os.Open(path) 
-		if err != nil {
-			log.Fatal(err)
-		}	
+	conn, err := net.Dial(network, address)
+	if err != nil {
+		log.Printf("Failed to establish connection")
+	}
+	
+	defer conn.Close()
+	
+	fileInfo, err := os.Stat(path)
+	if err != nil {
+		log.Fatal("Unable to get file info")
+	}
 
-		defer file.Close()
-		if _, err := io.Copy(conn, file); err != nil {
-			log.Fatal(err)
-		}
-	}()
+	filename := fileInfo.Name()
+	fileSize := fileInfo.Size()
 
-	wg.Wait()
+	metadata := fmt.Sprintf("%s|%d\n", filename, fileSize)
+	_, err = conn.Write([]byte(metadata))
+	if err != nil {
+		log.Printf("Unable to send over metadata")
+	}
+
+	file, err := os.Open(path)
+	if err != nil {
+		log.Printf("Unable to grab file from path:" + path)
+	}
+
+	_, err = io.Copy(conn, file)
+	if err != nil {
+		log.Fatal("Unable to send file over TCP connection")
+	}
 }
