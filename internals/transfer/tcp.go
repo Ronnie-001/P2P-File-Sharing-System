@@ -2,11 +2,15 @@
 package transfer
 
 import (
+	"bufio"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -29,48 +33,60 @@ func StartTCPServer() (error) {
 		log.Fatal(err)
 	}
 	
-	data := make(chan string)
-	var wg sync.WaitGroup
-	
-	// only accept 2 connections 1=[name & filetype] & 2=[actual data from the file]  
-	for i := 0; i < 2; i++ {
+	for {
 		conn, err := ln.Accept()
 		if err != nil {
 			return fmt.Errorf("unable to accept incoming connections: %v", err)		
 		}
-		wg.Add(1)
-		go handleConnection(i, conn, &wg, data)
+		go handleConnection(conn)		
 	}
-
-	wg.Wait()
-	close(data)
-	RecieveFile(data)	
-
-	return nil
 }
 
-func handleConnection(id int, conn net.Conn, wg *sync.WaitGroup, data chan string) (error) {
+func handleConnection(conn net.Conn) {
 	defer conn.Close()
-	defer wg.Done()
-	
-	bytes := make([]byte, byteLimit)	
-	for {
-		_, err := conn.Read(bytes)	
-		if err != nil {
-			if id == 0 {
-				return fmt.Errorf("error when trying to read in the name and filetype: %v", err)
-			}
-			if id == 1 {
-				return fmt.Errorf("error when trying to read in raw data from file")	
-			}
-		}
 
-		data <- string(bytes)
-		fmt.Printf("Data read from %v successfully!", id)
+	// grab the files metadata
+	reader := bufio.NewReader(conn)
+	metadataStr, err := reader.ReadString('\n')
+	if err != nil {
+		return 
 	}
+
+	metadataStr = strings.TrimSpace(metadataStr)
+	parts := strings.Split(metadataStr, "|")
+	if len(parts) != 2 {
+		return
+	}
+
+	filename := parts[0]
+	fileSizeStr := parts[1]
+	fileSize, err :=  strconv.ParseInt(fileSizeStr, 10, 64)
+	if err != nil {
+		return
+	}
+
+	// create the file
+	file, err := os.Create(filename)
+	if err != nil {
+		return
+	}
+
+	defer file.Close()
+	
+	n, err := io.Copy(file, io.LimitReader(reader, fileSize))
+	if err != nil {
+		return 
+	}
+
+	if n != fileSize {
+		log.Printf("Recieved more bytes than usual")
+	}
+
 }
 
 func SendFile(name, path string) {
+	var wg sync.WaitGroup
+
 	localIP, ok := m[name]
 	if !ok {
 		fmt.Println("IP of user " + name + " not found!")
@@ -78,23 +94,42 @@ func SendFile(name, path string) {
 	
 	// form the address from the local ip and port number
 	address := localIP + port
-	conn, err := net.Dial(network, address)
-	if err != nil {
-		log.Fatal(err)
-	}
-	
-	file, err := os.Open(path) 
-	if err != nil {
-		log.Fatal(err)
-	}
 
-	defer file.Close()
-	
-	if _, err := io.Copy(conn, file); err != nil {
-		log.Fatal(err)
-	}
-}
+	// go routine to send the name of the file and the file type.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		conn, err := net.Dial(network, address)
+		if err != nil {
+			log.Fatal(err)
+		}
 
-func RecieveFile(data chan string) {
-	//TODO: iterate over the go channel to recive file info and data.
+		defer conn.Close()	
+
+		splitPath := strings.Split(path, "/")
+		nameOfFile := splitPath[len(splitPath) - 1]
+		
+		conn.Write([]byte(nameOfFile))
+	}()	
+	
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		conn, err := net.Dial(network, address)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer conn.Close()
+		file, err := os.Open(path) 
+		if err != nil {
+			log.Fatal(err)
+		}	
+
+		defer file.Close()
+		if _, err := io.Copy(conn, file); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	wg.Wait()
 }
